@@ -29,6 +29,11 @@ export function ModelSelector({
   const [optimisticModelId, setOptimisticModelId] =
     useOptimistic(selectedModelId);
 
+  // Handle case where session might be null during hydration
+  if (!session?.user) {
+    return null;
+  }
+
   const userType = session.user.type;
   const { availableChatModelIds } = entitlementsByUserType[userType];
 

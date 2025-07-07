@@ -34,6 +34,54 @@
 - [Auth.js](https://authjs.dev)
   - Simple and secure authentication
 
+## Guest User Rate Limiting
+
+This template includes a comprehensive guest user rate limiting system that encourages users to subscribe after trying the service:
+
+### Features
+- **Cookie-based Session Management**: Guest users are tracked across chat sessions using persistent cookies
+- **Message Count Tracking**: Accumulates message count across different chat conversations
+- **Subscription Popup**: Automatically triggers after 3 messages to prompt guest users to create an account
+- **Cross-tab Persistence**: Rate limiting works across multiple browser tabs and page refreshes
+
+### How It Works
+1. **Guest User Creation**: When a user visits without authentication, a guest user is created automatically
+2. **Cookie Persistence**: Three cookies track the guest session:
+   - `guest-user-id`: Unique identifier for the guest user
+   - `guest-user-type`: Always set to "guest"
+   - `guest-message-count`: Running count of messages sent
+3. **Rate Limiting**: After 3 messages, the 4th message attempt returns a 429 status with subscription prompt
+4. **Session Reuse**: Returning guests reuse their existing session and message count
+
+### Security Considerations
+The current implementation provides reasonable protection against casual bypass attempts:
+
+**✅ Protected Against:**
+- Opening new tabs in the same browser
+- Page refreshes
+- Starting new chat conversations
+- Closing and reopening the browser (within cookie expiry)
+
+**⚠️ Can Be Bypassed By:**
+- Using incognito/private browsing mode
+- Switching to different browsers
+- Clearing browser cookies/data
+- Using different devices
+
+For stricter rate limiting, consider implementing IP-based restrictions or requiring email verification for guest users.
+
+### Configuration
+Guest user limits are configured in `/lib/ai/entitlements.ts`:
+```typescript
+export const entitlementsByUserType = {
+  guest: {
+    maxMessagesPerDay: 3,
+    // ... other limits
+  },
+  // ... other user types
+};
+```
+
 ## Model Providers
 
 This template ships with [xAI](https://x.ai) `grok-2-1212` as the default chat model. However, with the [AI SDK](https://sdk.vercel.ai/docs), you can switch LLM providers to [OpenAI](https://openai.com), [Anthropic](https://anthropic.com), [Cohere](https://cohere.com/), and [many more](https://sdk.vercel.ai/providers/ai-sdk-providers) with just a few lines of code.

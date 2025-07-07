@@ -41,7 +41,8 @@ export default function Page() {
 
       setIsSuccessful(true);
       updateSession();
-      router.refresh();
+      // Redirect to home page after successful registration
+      router.push('/');
     }
   }, [state]);
 

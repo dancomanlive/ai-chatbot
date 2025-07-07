@@ -36,6 +36,11 @@ export async function generateTitleFromUserMessage({
 export async function deleteTrailingMessages({ id }: { id: string }) {
   const [message] = await getMessageById({ id });
 
+  // If no message is found (e.g., for guest users), just return early
+  if (!message) {
+    return;
+  }
+
   await deleteMessagesByChatIdAfterTimestamp({
     chatId: message.chatId,
     timestamp: message.createdAt,

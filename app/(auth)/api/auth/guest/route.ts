@@ -1,19 +1,16 @@
 import { NextResponse } from 'next/server';
-import { redirect } from 'next/navigation';
+import { createGuestUser } from '@/lib/db/queries';
 import { signIn } from '@/app/(auth)/auth';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const redirectUrl = searchParams.get('redirectUrl') || '/';
 
-  try {
-    // Use NextAuth signIn with the guest provider, which should handle everything
-    const result = await signIn('guest', { 
-      redirectTo: redirectUrl,
-      redirect: true
-    });
+  console.log('Guest authentication requested, redirectUrl:', redirectUrl);
 
-    // This shouldn't be reached if redirect: true works
+  try {
+    // Simply redirect to the requested URL and let the chat API handle guest authentication
+    console.log('Redirecting directly to:', redirectUrl);
     return NextResponse.redirect(new URL(redirectUrl, request.url));
   } catch (error) {
     console.error('Guest user creation failed:', error);

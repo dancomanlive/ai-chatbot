@@ -66,8 +66,12 @@ export const {
       id: 'guest',
       credentials: {},
       async authorize() {
+        console.log('Guest provider authorize() called');
         const [guestUser] = await createGuestUser();
-        return { ...guestUser, type: 'guest' };
+        console.log('Guest user created:', guestUser);
+        const result = { ...guestUser, type: 'guest' as UserType };
+        console.log('Returning guest user with type:', result);
+        return result;
       },
     }),
   ],

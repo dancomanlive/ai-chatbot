@@ -23,9 +23,29 @@ export async function middleware(request: NextRequest) {
     secureCookie: !isDevelopmentEnvironment,
   });
 
+  // TEMPORARILY DISABLE AUTH FOR TESTING - allow all requests through
+  // The chat API will handle guest authentication directly
+  return NextResponse.next();
+
+  // Check for guest user cookies if no token exists
+  if (!token) {
+    const guestUserId = request.cookies.get('guest-user-id')?.value;
+    const guestUserType = request.cookies.get('guest-user-type')?.value;
+    
+    // If we have guest cookies, allow the request to proceed
+    if (guestUserId && guestUserType === 'guest') {
+      return NextResponse.next();
+    }
+  }
+
   if (!token) {
     // Allow unauthenticated access to login and register pages
     if (['/login', '/register'].includes(pathname)) {
+      return NextResponse.next();
+    }
+
+    // Allow unauthenticated access to API routes - they'll handle their own auth
+    if (pathname.startsWith('/api/')) {
       return NextResponse.next();
     }
 

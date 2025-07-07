@@ -40,7 +40,8 @@ export default function Page() {
     } else if (state.status === 'success') {
       setIsSuccessful(true);
       updateSession();
-      router.refresh();
+      // Redirect to home page after successful login
+      router.push('/');
     }
   }, [state.status]);
 
