@@ -1,21 +1,22 @@
-import { signIn } from '@/app/(auth)/auth';
-import { isDevelopmentEnvironment } from '@/lib/constants';
-import { getToken } from 'next-auth/jwt';
 import { NextResponse } from 'next/server';
+import { redirect } from 'next/navigation';
+import { signIn } from '@/app/(auth)/auth';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const redirectUrl = searchParams.get('redirectUrl') || '/';
 
-  const token = await getToken({
-    req: request,
-    secret: process.env.AUTH_SECRET,
-    secureCookie: !isDevelopmentEnvironment,
-  });
+  try {
+    // Use NextAuth signIn with the guest provider, which should handle everything
+    const result = await signIn('guest', { 
+      redirectTo: redirectUrl,
+      redirect: true
+    });
 
-  if (token) {
-    return NextResponse.redirect(new URL('/', request.url));
+    // This shouldn't be reached if redirect: true works
+    return NextResponse.redirect(new URL(redirectUrl, request.url));
+  } catch (error) {
+    console.error('Guest user creation failed:', error);
+    return NextResponse.redirect(new URL('/login', request.url));
   }
-
-  return signIn('guest', { redirect: true, redirectTo: redirectUrl });
 }

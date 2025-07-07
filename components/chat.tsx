@@ -16,12 +16,22 @@ import { unstable_serialize } from 'swr/infinite';
 import { getChatHistoryPaginationKey } from './sidebar-history';
 import { toast } from './toast';
 import type { Session } from 'next-auth';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useChatVisibility } from '@/hooks/use-chat-visibility';
 import { useAutoResume } from '@/hooks/use-auto-resume';
 import { ChatSDKError } from '@/lib/errors';
 import type { Attachment, ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export function Chat({
   id,
@@ -40,6 +50,7 @@ export function Chat({
   session: Session;
   autoResume: boolean;
 }) {
+  const router = useRouter();
   const { visibilityType } = useChatVisibility({
     chatId: id,
     initialVisibilityType,
@@ -47,6 +58,7 @@ export function Chat({
 
   const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
+  const [showGuestRegistrationDialog, setShowGuestRegistrationDialog] = useState(false);
 
   const [input, setInput] = useState<string>('');
 
@@ -85,11 +97,36 @@ export function Chat({
       mutate(unstable_serialize(getChatHistoryPaginationKey));
     },
     onError: (error) => {
+      console.log('Chat onError triggered:', error);
+      console.log('Error constructor:', error?.constructor?.name);
+      console.log('Error instanceof ChatSDKError:', error instanceof ChatSDKError);
+      console.log('User type:', session.user.type);
+      
       if (error instanceof ChatSDKError) {
-        toast({
-          type: 'error',
-          description: error.message,
-        });
+        console.log('Error type:', error.type);
+        console.log('Error surface:', error.surface);
+        // Special handling for guest users hitting rate limit
+        if (error.type === 'rate_limit' && error.surface === 'chat' && session.user.type === 'guest') {
+          console.log('Showing guest registration dialog');
+          setShowGuestRegistrationDialog(true);
+        } else {
+          toast({
+            type: 'error',
+            description: error.message,
+          });
+        }
+      } else {
+        console.log('Error is not ChatSDKError, raw error:', error);
+        // Fallback: check if it's a rate limit error by message or status
+        if (error?.message?.includes('rate limit') || error?.message?.includes('429')) {
+          console.log('Detected rate limit error, showing registration dialog');
+          setShowGuestRegistrationDialog(true);
+        } else {
+          toast({
+            type: 'error',
+            description: error?.message || 'An error occurred',
+          });
+        }
       }
     },
   });
@@ -183,6 +220,22 @@ export function Chat({
         isReadonly={isReadonly}
         selectedVisibilityType={visibilityType}
       />
+      
+      <AlertDialog open={showGuestRegistrationDialog} onOpenChange={setShowGuestRegistrationDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ready for more conversations?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You&apos;ve used your free messages! Create an account to continue chatting and unlock unlimited conversations.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogAction onClick={() => router.push('/register')}>
+              Sign up now
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

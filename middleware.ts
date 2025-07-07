@@ -24,6 +24,11 @@ export async function middleware(request: NextRequest) {
   });
 
   if (!token) {
+    // Allow unauthenticated access to login and register pages
+    if (['/login', '/register'].includes(pathname)) {
+      return NextResponse.next();
+    }
+
     const redirectUrl = encodeURIComponent(request.url);
 
     return NextResponse.redirect(

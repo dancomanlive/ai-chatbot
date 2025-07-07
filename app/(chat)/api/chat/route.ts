@@ -219,12 +219,25 @@ export async function POST(request: Request) {
         ),
       );
     } else {
-      return new Response(stream);
+      // Return the stream with proper transformation for compatibility
+      return new Response(
+        stream.pipeThrough(new JsonToSseTransformStream()),
+        {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        }
+      );
     }
   } catch (error) {
     if (error instanceof ChatSDKError) {
       return error.toResponse();
     }
+    
+    console.error('Unexpected error in chat API:', error);
+    return new ChatSDKError('bad_request:chat', 'An unexpected error occurred').toResponse();
   }
 }
 
