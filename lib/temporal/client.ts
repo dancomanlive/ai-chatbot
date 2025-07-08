@@ -36,7 +36,7 @@ export interface TemporalEvent {
   chatId?: string;
   userId?: string;
   timestamp?: string;
-  workflowType?: 'incident' | 'document_processing' | 'data_processing';
+  workflowType?: 'document_processing' | 'data_processing';
 }
 
 /**
@@ -56,26 +56,6 @@ export async function triggerWorkflow(
     let handle: WorkflowHandle;
     
     switch (workflowType) {
-      case 'incident':
-        handle = await client.workflow.start('IncidentWorkflow', {
-          args: [{
-            incident_id: `incident-${Date.now()}`,
-            source: event.source,
-            severity: event.metadata?.severity || 'medium',
-            message: event.message || 'Incident reported from chat',
-            event_type: event.eventType,
-            timestamp: event.timestamp || new Date().toISOString(),
-            additional_context: {
-              ...event.metadata,
-              chatId: event.chatId,
-              userId: event.userId
-            }
-          }],
-          taskQueue: 'incident_workflow-queue',
-          workflowId: actualWorkflowId,
-        });
-        break;
-        
       case 'document_processing':
         handle = await client.workflow.start('DocumentProcessingWorkflow', {
           args: [{
@@ -128,22 +108,16 @@ function determineWorkflowType(event: TemporalEvent): string {
   }
   
   // Determine based on event type
-  if (event.eventType.includes('incident') || 
-      event.eventType.includes('alert') || 
-      event.eventType.includes('error')) {
-    return 'incident';
-  }
-  
-  if (event.eventType.includes('ObjectCreated') || 
-      event.eventType.includes('BlobCreated') || 
-      event.eventType.includes('document') ||
+  if (event.eventType.includes('document') || 
+      event.eventType.includes('ObjectCreated') || 
+      event.eventType.includes('BlobCreated') ||
       event.source === 's3' ||
       event.source === 'azure-blob') {
     return 'document_processing';
   }
   
-  // Default to incident workflow for unknown types
-  return 'incident';
+  // Default to document processing workflow for unknown types
+  return 'document_processing';
 }
 
 /**
@@ -160,9 +134,7 @@ export async function getWorkflowStatus(workflowId: string): Promise<any> {
     // Try to query workflow-specific status
     let status;
     try {
-      if (workflowId.includes('incident')) {
-        status = await handle.query('getIncidentStatus');
-      } else if (workflowId.includes('document')) {
+      if (workflowId.includes('document')) {
         status = await handle.query('getProcessingStatus');
       } else {
         status = await handle.query('getStatus');

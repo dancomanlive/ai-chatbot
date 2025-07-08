@@ -4,9 +4,9 @@ const { triggerWorkflow } = require('./lib/temporal/client.ts');
 async function testWorkflowTrigger() {
   try {
     const result = await triggerWorkflow({
-      eventType: 'incident',
+      eventType: 'document-added',
       source: 'monitoring',
-      message: 'Test incident from direct API call',
+      message: 'Test document from direct API call',
       metadata: {
         priority: 'high',
         system: 'payment-service',

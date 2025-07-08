@@ -17,7 +17,7 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
   tool({
     description: `
       Trigger a Temporal workflow based on user requests. Use this when users want to:
-      - Report incidents or system issues
+      - Process documents and files
       - Process documents or files
       - Start data processing jobs
       - Run any workflow-based automation
@@ -64,7 +64,7 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
         
         return {
           success: true,
-          message: `Workflow triggered successfully! I've ${extractedEvent.eventType === 'incident' ? 'started incident response' : 
+          message: `Workflow triggered successfully! I've ${extractedEvent.eventType === 'document-added' ? 'started document processing' : 
             extractedEvent.eventType?.includes('document') ? 'begun document processing' :
             'initiated workflow processing'} for your request.`,
           workflowId: result.workflowId,
@@ -100,7 +100,7 @@ export const checkWorkflowStatus = ({ session, chatId }: TemporalToolProps) =>
       Check the status of a running Temporal workflow. Use this when users ask about:
       - Status of their requests
       - Progress of document processing
-      - Incident response updates
+      - Document processing updates
       - Any workflow they've previously started
     `,
     inputSchema: z.object({
