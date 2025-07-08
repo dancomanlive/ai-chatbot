@@ -1,3 +1,11 @@
+// Updated chat API integration with ChatSessionWorkflow
+import {
+  startChatSessionWorkflow,
+  sendMessageToChatSession,
+  getChatSessionStatus,
+  updateChatSessionUser
+} from '@/lib/temporal/chat-workflow';
+
 import {
   convertToModelMessages,
   createUIMessageStream,
@@ -111,7 +119,6 @@ export async function POST(request: Request) {
       if (guestUserId && guestUserType === 'guest') {
         userType = 'guest';
         userId = guestUserId;
-        // Create a mock session for guest users
         effectiveSession = {
           user: {
             id: guestUserId,
@@ -133,35 +140,28 @@ export async function POST(request: Request) {
         
         // Set guest user cookies for future requests
         cookieStore.set('guest-user-id', guestUser.id, { 
-          secure: false, // Allow non-HTTPS in development
+          secure: false,
           sameSite: 'lax',
-          maxAge: 60 * 60 * 24, // 24 hours
+          maxAge: 60 * 60 * 24,
           path: '/'
         });
         cookieStore.set('guest-user-type', 'guest', { 
-          secure: false, // Allow non-HTTPS in development
+          secure: false,
           sameSite: 'lax',
-          maxAge: 60 * 60 * 24, // 24 hours
+          maxAge: 60 * 60 * 24,
           path: '/'
         });
         cookieStore.set('guest-message-count', '0', {
-          secure: false, // Allow non-HTTPS in development
+          secure: false,
           sameSite: 'lax',
-          maxAge: 60 * 60 * 24, // 24 hours
+          maxAge: 60 * 60 * 24,
           path: '/'
         });
         
-        // Also add to response headers manually for better reliability
         responseCookies.push(`guest-user-id=${guestUser.id}; Path=/; SameSite=lax; Max-Age=${60 * 60 * 24}`);
         responseCookies.push(`guest-user-type=guest; Path=/; SameSite=lax; Max-Age=${60 * 60 * 24}`);
         responseCookies.push(`guest-message-count=0; Path=/; SameSite=lax; Max-Age=${60 * 60 * 24}`);
         
-        console.log('Debug - Cookies set, verifying:', {
-          setGuestUserId: guestUser.id,
-          readGuestUserId: cookieStore.get('guest-user-id')?.value
-        });
-        
-        // Create a mock session for guest users
         effectiveSession = {
           user: {
             id: guestUser.id,
@@ -176,41 +176,36 @@ export async function POST(request: Request) {
 
     console.log('Chat API - User type:', userType, 'User ID:', userId);
 
-    // 🚀 NEW: Initialize chat session workflow for long-running conversation state
-    let chatWorkflowActive = false;
+    // 🚀 NEW: Initialize or get chat session workflow
+    let chatWorkflowStarted = false;
     try {
-      const { startChatSessionWorkflow, sendMessageToChatSession } = await import('@/lib/temporal/chat-workflow');
-      
-      // Start or get existing chat session workflow
-      const { workflowId } = await startChatSessionWorkflow(
+      // First, try to start/get the chat session workflow
+      // Map userType to workflow expected values
+      const workflowUserType = userType === 'regular' ? 'authenticated' : 'guest';
+      const { workflowId, handle } = await startChatSessionWorkflow(
         id, // Use chat ID as session ID
         userId,
-        userType === 'guest' ? 'guest' : 'authenticated'
+        workflowUserType
       );
       
-      console.log(`✓ Chat session workflow active: ${workflowId}`);
+      console.log(`Chat session workflow: ${workflowId}`);
       
-      // Send current message to workflow for processing
-      await sendMessageToChatSession(id, {
-        messageId: message.id,
-        content: typeof message.parts === 'string' ? message.parts : JSON.stringify(message.parts),
-        role: 'user',
-        timestamp: new Date().toISOString(),
-        userId,
-        metadata: {
-          selectedChatModel,
-          selectedVisibilityType,
-        }
-      });
+      // Update user info in workflow if session exists
+      if (session?.user) {
+        await updateChatSessionUser(id, userId, workflowUserType);
+      }
       
-      chatWorkflowActive = true;
+      chatWorkflowStarted = true;
     } catch (error) {
-      console.warn('Chat workflow integration failed, continuing with traditional approach:', error);
-      // Continue with existing logic if workflow fails
+      console.error('Failed to start chat session workflow:', error);
+      // Continue with traditional approach if workflow fails
     }
 
-    // Skip database operations for guest users
+    // Load existing messages for context
+    let existingMessages: ChatMessage[] = [];
+    
     if (userType !== 'guest') {
+      // For authenticated users, use database
       const chat = await getChatById({ id });
 
       if (!chat) {
@@ -229,111 +224,148 @@ export async function POST(request: Request) {
           return new ChatSDKError('forbidden:chat').toResponse();
         }
       }
+
+      // Get and convert database messages to UI format
+      const dbMessages = await getMessagesByChatId({ id });
+      existingMessages = convertToUIMessages(dbMessages);
+    } else if (chatWorkflowStarted) {
+      // For guest users with workflow, get history from workflow
+      try {
+        const { getChatSessionHistory } = await import('@/lib/temporal/chat-workflow');
+        const workflowHistory = await getChatSessionHistory(id, 50);
+        
+        // Convert workflow history to ChatMessage format
+        existingMessages = workflowHistory.map(msg => ({
+          id: msg.messageId,
+          chatId: id,
+          role: msg.role as 'user' | 'assistant' | 'system',
+          parts: [{ type: 'text' as const, text: msg.content }],
+          metadata: { createdAt: msg.timestamp },
+          createdAt: new Date(msg.timestamp),
+        }));
+      } catch (error) {
+        console.error('Failed to get workflow history:', error);
+        existingMessages = [];
+      }
     }
 
-    // For guests, use empty message history; for registered users, get from DB
-    const messagesFromDb = userType === 'guest' ? [] : await getMessagesByChatId({ id });
-    const uiMessages = [...convertToUIMessages(messagesFromDb), message];
+    // 🚀 NEW: Send message to chat session workflow
+    if (chatWorkflowStarted) {
+      try {
+        const messageId = generateUUID();
+        await sendMessageToChatSession(id, {
+          messageId,
+          content: message.parts?.find(part => part.type === 'text')?.text || '',
+          role: 'user',
+          timestamp: new Date().toISOString(),
+          userId,
+          metadata: {
+            selectedChatModel,
+            selectedVisibilityType,
+          }
+        });
+        
+        console.log(`Message sent to chat workflow: ${messageId}`);
+      } catch (error) {
+        console.error('Failed to send message to workflow:', error);
+      }
+    }
 
-    // Handle message counting for rate limiting (moved here to access uiMessages)
-    let messageCount = 0;
-    if (userType !== 'guest') {
-      // For regular users, count messages from database
-      messageCount = await getMessageCountByUserId({
-        id: userId,
-        differenceInHours: 24,
-      });
-    } else {
-      // For guest users, use and increment cookie-based counter
-      const guestMessageCountCookie = cookieStore.get('guest-message-count')?.value;
-      messageCount = guestMessageCountCookie ? parseInt(guestMessageCountCookie, 10) + 1 : 1;
+    // Check rate limiting after loading messages
+    if (userType === 'guest') {
+      let messageCount = 0;
       
-      // Update the cookie for the next request
-      cookieStore.set('guest-message-count', messageCount.toString(), {
-        secure: false, // Allow non-HTTPS in development
+      if (chatWorkflowStarted) {
+        // Get count from workflow
+        try {
+          const sessionStatus = await getChatSessionStatus(id);
+          messageCount = sessionStatus?.messageCount || 0;
+        } catch (error) {
+          console.error('Failed to get session status from workflow:', error);
+          // Fallback to cookie-based counting
+          messageCount = parseInt(cookieStore.get('guest-message-count')?.value || '0', 10);
+        }
+      } else {
+        // Fallback to cookie-based counting
+        messageCount = parseInt(cookieStore.get('guest-message-count')?.value || '0', 10);
+      }
+      
+      console.log('Debug - Current guest message count:', messageCount);
+      
+      // Check if user has exceeded the limit (3 messages for guests)
+      const entitlements = entitlementsByUserType[userType];
+      if (messageCount >= entitlements.maxMessagesPerDay) {
+        console.log('Debug - Guest user hit rate limit:', { messageCount, limit: entitlements.maxMessagesPerDay });
+        
+        return new Response(
+          JSON.stringify({
+            error: 'rate_limited',
+            message: 'You have reached the maximum number of messages for guest users. Please create an account to continue chatting.',
+            limit: entitlements.maxMessagesPerDay,
+            current: messageCount,
+            upgrade_required: true
+          }),
+          {
+            status: 429,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(responseCookies.length > 0 && {
+                'Set-Cookie': responseCookies.join(', ')
+              })
+            },
+          }
+        );
+      }
+      
+      // Increment and update guest message count
+      const newCount = messageCount + 1;
+      console.log('Debug - Incrementing guest message count to:', newCount);
+      
+      cookieStore.set('guest-message-count', newCount.toString(), {
+        secure: false,
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24, // 24 hours
+        maxAge: 60 * 60 * 24,
         path: '/'
       });
       
-      // Also add to response headers manually
-      responseCookies.push(`guest-message-count=${messageCount}; Path=/; SameSite=lax; Max-Age=${60 * 60 * 24}`);
-      
-      console.log('Guest user message count (cookie-based):', messageCount);
+      responseCookies.push(`guest-message-count=${newCount}; Path=/; SameSite=lax; Max-Age=${60 * 60 * 24}`);
     }
 
-    console.log('Final messageCount for rate limiting:', messageCount, 'userType:', userType);
-    
-    if (messageCount > entitlementsByUserType[userType].maxMessagesPerDay) {
-      console.log('Rate limit triggered! messageCount:', messageCount, 'limit:', entitlementsByUserType[userType].maxMessagesPerDay);
-      return new ChatSDKError('rate_limit:chat').toResponse();
-    }
+    // Continue with the rest of the existing chat logic...
+    const allMessages = [...existingMessages, message];
+    const modelMessages = convertToModelMessages(allMessages);
 
-    const { longitude, latitude, city, country } = geolocation(request);
+    const { longitude, latitude, city, country } = isProductionEnvironment ? geolocation(request) : { longitude: '0', latitude: '0', city: '', country: '' };
 
-    const requestHints: RequestHints = {
+    const requestHints = {
       longitude,
       latitude,
       city,
       country,
     };
 
-    // Save initial user message (skip for guests)
-    if (userType !== 'guest') {
-      await saveMessages({
-        messages: [
-          {
-            chatId: id,
-            id: message.id,
-            role: 'user',
-            parts: message.parts,
-            attachments: [],
-            createdAt: new Date(),
-          },
-        ],
-      });
-    }
-
-    const streamId = generateUUID();
-    if (userType !== 'guest') {
-      await createStreamId({ streamId, chatId: id });
-    }
-
-    console.log(JSON.stringify(uiMessages, null, 2));
+    const streamContext = getStreamContext();
 
     const stream = createUIMessageStream({
       execute: ({ writer: dataStream }) => {
         const result = streamText({
           model: myProvider.languageModel(selectedChatModel),
           system: systemPrompt({ selectedChatModel, requestHints }),
-          messages: convertToModelMessages(uiMessages),
+          messages: modelMessages,
           stopWhen: stepCountIs(5),
-          experimental_activeTools:
-            selectedChatModel === 'chat-model-reasoning'
-              ? []
-              : [
-                  'getWeather',
-                  'createDocument',
-                  'updateDocument',
-                  'requestSuggestions',
-                  'triggerWorkflow',
-                  'checkWorkflowStatus',
-                ],
+          experimental_activeTools: stepCountIs(0) ? [
+            'triggerWorkflow',
+            'checkWorkflowStatus',
+            'getWeather'
+          ] : undefined,
           experimental_transform: smoothStream({ chunking: 'word' }),
           tools: {
             getWeather,
-            createDocument: createDocument({ session: effectiveSession, dataStream }),
-            updateDocument: updateDocument({ session: effectiveSession, dataStream }),
-            requestSuggestions: requestSuggestions({
-              session: effectiveSession,
-              dataStream,
-            }),
             triggerWorkflow: triggerWorkflow({ session: effectiveSession, chatId: id }),
             checkWorkflowStatus: checkWorkflowStatus({ session: effectiveSession, chatId: id }),
           },
           experimental_telemetry: {
-            isEnabled: isProductionEnvironment,
-            functionId: 'stream-text',
+            isEnabled: true,
           },
         });
 
@@ -347,18 +379,44 @@ export async function POST(request: Request) {
       },
       generateId: generateUUID,
       onFinish: async ({ messages }) => {
-        // Save AI response messages (skip for guests)
-        if (userType !== 'guest') {
-          await saveMessages({
-            messages: messages.map((message) => ({
-              id: message.id,
-              role: message.role,
-              parts: message.parts,
-              createdAt: new Date(),
-              attachments: [],
-              chatId: id,
-            })),
-          });
+        try {
+          const lastMessage = messages[messages.length - 1];
+          const responseContent = lastMessage?.parts?.find(part => part.type === 'text')?.text || '';
+          
+          // 🚀 NEW: Send AI response to chat session workflow
+          if (chatWorkflowStarted) {
+            try {
+              await sendMessageToChatSession(id, {
+                messageId: generateUUID(),
+                content: responseContent,
+                role: 'assistant',
+                timestamp: new Date().toISOString(),
+                userId: 'system',
+                metadata: {
+                  model: selectedChatModel,
+                  finishReason: 'stop',
+                }
+              });
+            } catch (error) {
+              console.error('Failed to send AI response to workflow:', error);
+            }
+          }
+
+          // Save to database for authenticated users
+          if (userType !== 'guest') {
+            await saveMessages({
+              messages: messages.map((message) => ({
+                id: message.id,
+                role: message.role,
+                parts: message.parts,
+                createdAt: new Date(),
+                attachments: [],
+                chatId: id,
+              })),
+            });
+          }
+        } catch (error) {
+          console.error('Error in onFinish:', error);
         }
       },
       onError: (error) => {
@@ -366,8 +424,6 @@ export async function POST(request: Request) {
         return 'Oops, an error occurred!';
       },
     });
-
-    const streamContext = getStreamContext();
 
     // Prepare headers with cookies
     const headers = new Headers({
@@ -384,6 +440,7 @@ export async function POST(request: Request) {
     }
 
     if (streamContext) {
+      const streamId = generateUUID();
       return new Response(
         await streamContext.resumableStream(streamId, () =>
           stream.pipeThrough(new JsonToSseTransformStream()),
@@ -398,36 +455,7 @@ export async function POST(request: Request) {
       );
     }
   } catch (error) {
-    if (error instanceof ChatSDKError) {
-      return error.toResponse();
-    }
-    
-    console.error('Unexpected error in chat API:', error);
-    return new ChatSDKError('bad_request:chat', 'An unexpected error occurred').toResponse();
+    console.error('Chat API error:', error);
+    return new ChatSDKError('bad_request:chat').toResponse();
   }
-}
-
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get('id');
-
-  if (!id) {
-    return new ChatSDKError('bad_request:api').toResponse();
-  }
-
-  const session = await auth();
-
-  if (!session?.user) {
-    return new ChatSDKError('unauthorized:chat').toResponse();
-  }
-
-  const chat = await getChatById({ id });
-
-  if (chat.userId !== session.user.id) {
-    return new ChatSDKError('forbidden:chat').toResponse();
-  }
-
-  const deletedChat = await deleteChatById({ id });
-
-  return Response.json(deletedChat, { status: 200 });
 }

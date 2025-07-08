@@ -1,9 +1,9 @@
 // Test script for triggering workflows without authentication
-const { triggerRootOrchestrator } = require('./lib/temporal/client.ts');
+const { triggerWorkflow } = require('./lib/temporal/client.ts');
 
 async function testWorkflowTrigger() {
   try {
-    const result = await triggerRootOrchestrator({
+    const result = await triggerWorkflow({
       eventType: 'incident',
       source: 'monitoring',
       message: 'Test incident from direct API call',

@@ -29,12 +29,8 @@ export function ModelSelector({
   const [optimisticModelId, setOptimisticModelId] =
     useOptimistic(selectedModelId);
 
-  // Handle case where session might be null during hydration
-  if (!session?.user) {
-    return null;
-  }
-
-  const userType = session.user.type;
+  // Get user type, defaulting to 'guest' for safety
+  const userType = session?.user?.type || 'guest';
   const { availableChatModelIds } = entitlementsByUserType[userType];
 
   const availableChatModels = chatModels.filter((chatModel) =>
@@ -48,6 +44,11 @@ export function ModelSelector({
       ),
     [optimisticModelId, availableChatModels],
   );
+
+  // Handle case where session might be null during hydration
+  if (!session?.user) {
+    return null;
+  }
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>

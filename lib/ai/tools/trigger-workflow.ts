@@ -2,7 +2,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import type { Session } from 'next-auth';
-import { triggerRootOrchestrator, getWorkflowStatus } from '@/lib/temporal/client';
+import { triggerWorkflow as startWorkflow, getWorkflowStatus } from '@/lib/temporal/client';
 import { extractEventFromMessage, createTemporalEvent } from '@/lib/temporal/event-extraction';
 
 interface TemporalToolProps {
@@ -60,7 +60,7 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
         }
         
         // Trigger the Root Orchestrator workflow
-        const result = await triggerRootOrchestrator(temporalEvent);
+        const result = await startWorkflow(temporalEvent);
         
         return {
           success: true,
