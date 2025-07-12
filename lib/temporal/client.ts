@@ -36,7 +36,7 @@ export interface TemporalEvent {
   chatId?: string;
   userId?: string;
   timestamp?: string;
-  workflowType?: 'document_processing' | 'data_processing';
+  workflowType?: 'document_processing' | 'data_processing' | 'semantic_search';
 }
 
 /**
@@ -80,6 +80,30 @@ export async function triggerWorkflow(
         });
         break;
         
+      case 'semantic_search':
+        handle = await client.workflow.start('SemanticSearchWorkflow', {
+          args: [{
+            query: event.message || event.metadata?.query || event.metadata?.originalMessage,
+            session_id: event.chatId || 'default-session',
+            user_id: event.userId || event.metadata?.userId || 'default-user',
+            model: 'text-embedding-ada-002',
+            top_k: 5,
+            metadata: {
+              source: event.source,
+              event_type: event.eventType,
+              timestamp: event.timestamp || new Date().toISOString()
+            },
+            additional_context: {
+              ...event.metadata,
+              chatId: event.chatId,
+              userId: event.userId
+            }
+          }],
+          taskQueue: 'semantic-search-queue',
+          workflowId: actualWorkflowId,
+        });
+        break;
+        
       default:
         throw new Error(`Unsupported workflow type: ${workflowType}`);
     }
@@ -114,6 +138,13 @@ function determineWorkflowType(event: TemporalEvent): string {
       event.source === 's3' ||
       event.source === 'azure-blob') {
     return 'document_processing';
+  }
+  
+  if (event.eventType.includes('search') || 
+      event.eventType.includes('semantic-search') ||
+      event.eventType.includes('query') ||
+      event.eventType.includes('find')) {
+    return 'semantic_search';
   }
   
   // Default to document processing workflow for unknown types

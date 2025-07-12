@@ -90,27 +90,40 @@ export async function startChatSessionWorkflow(
     // Workflow doesn't exist, will create new one below
   }
   
-  // Start new chat session workflow
+  // Start new chat session workflow with proper ID reuse policy
   console.log(`Starting new chat session workflow: ${workflowId}`);
   
-  const handle = await client.workflow.start('ChatSessionWorkflow', {
-    args: [{
-      sessionId,
-      userId,
-      userType,
-      messageCount: 0,
-      isActive: true,
-      lastActivity: new Date().toISOString(),
-    }],
-    taskQueue: 'chat-session-queue',
-    workflowId,
-    // Let chat sessions run for up to 24 hours of inactivity
-    workflowExecutionTimeout: '24h',
-    // Each individual task can take up to 5 minutes
-    workflowTaskTimeout: '5m',
-  });
-  
-  return { workflowId, handle };
+  try {
+    const handle = await client.workflow.start('ChatSessionWorkflow', {
+      args: [{
+        sessionId,
+        userId,
+        userType,
+        messageCount: 0,
+        isActive: true,
+        lastActivity: new Date().toISOString(),
+      }],
+      taskQueue: 'chat-session-queue',
+      workflowId,
+      // Prevent duplicate workflows with same ID
+      workflowIdReusePolicy: 'REJECT_DUPLICATE',
+      // Let chat sessions run for up to 24 hours of inactivity
+      workflowExecutionTimeout: '24h',
+      // Each individual task can take up to 5 minutes
+      workflowTaskTimeout: '5m',
+    });
+    
+    return { workflowId, handle };
+  } catch (error: any) {
+    // If workflow already exists due to race condition, get the existing one
+    if (error.message?.includes('WorkflowExecutionAlreadyStarted') || 
+        error.message?.includes('WORKFLOW_EXECUTION_ALREADY_STARTED')) {
+      console.log(`Workflow already exists, using existing: ${workflowId}`);
+      const handle = client.workflow.getHandle(workflowId);
+      return { workflowId, handle };
+    }
+    throw error;
+  }
 }
 
 /**

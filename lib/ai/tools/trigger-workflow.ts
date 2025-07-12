@@ -18,14 +18,17 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
     description: `
       Trigger a Temporal workflow based on user requests. Use this when users want to:
       - Process documents and files
-      - Process documents or files
       - Start data processing jobs
+      - Search knowledge bases or perform semantic search
       - Run any workflow-based automation
       
       Examples:
       - "We have a critical system outage"
       - "Process the document at s3://bucket/file.pdf"
       - "Run the daily data pipeline"
+      - "Search for machine learning algorithms"
+      - "Find documents about AI"
+      - "I need to search our knowledge base"
     `,
     inputSchema: z.object({
       userMessage: z.string().describe('The original user message'),
@@ -66,6 +69,7 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
           success: true,
           message: `Workflow triggered successfully! I've ${extractedEvent.eventType === 'document-added' ? 'started document processing' : 
             extractedEvent.eventType?.includes('document') ? 'begun document processing' :
+            extractedEvent.eventType?.includes('search') ? 'initiated semantic search' :
             'initiated workflow processing'} for your request.`,
           workflowId: result.workflowId,
           runId: result.runId,

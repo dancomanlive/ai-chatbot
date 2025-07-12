@@ -35,6 +35,7 @@ WORKFLOW EVENT TYPES:
 - "incident": System failures, outages, alerts, problems that need investigation
 - "document-added" or "document-uploaded": New files, documents, reports to be processed  
 - "data-processing": Data analysis, ETL jobs, batch processing requests
+- "semantic-search": Search queries, information retrieval, knowledge base searches
 
 SOURCES:
 - "s3": Amazon S3 storage
@@ -48,6 +49,8 @@ EXAMPLES OF WORKFLOW EVENTS:
 - "Process the document at s3://bucket/file.pdf" → document-added, s3
 - "New report uploaded to SharePoint needs analysis" → document-uploaded, sharepoint  
 - "Run the daily data pipeline" → data-processing, user
+- "Search for machine learning algorithms" → semantic-search, user
+- "Find documents about AI" → semantic-search, user
 
 EXAMPLES OF NON-WORKFLOW EVENTS:
 - "Hello, how are you?" → General chat
@@ -109,7 +112,8 @@ export function detectWorkflowKeywords(message: string): boolean {
     'incident', 'outage', 'failure', 'down', 'error',
     'process', 'document', 'file', 's3://', 'upload',
     'analyze', 'pipeline', 'workflow', 'run', 'execute',
-    'critical', 'urgent', 'alert', 'monitor'
+    'critical', 'urgent', 'alert', 'monitor',
+    'search', 'find', 'lookup', 'query', 'retrieve'
   ];
   
   const lowerMessage = message.toLowerCase();
