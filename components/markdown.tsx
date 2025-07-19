@@ -8,6 +8,37 @@ const components: Partial<Components> = {
   // @ts-expect-error
   code: CodeBlock,
   pre: ({ children }) => <>{children}</>,
+  p: ({ node, children, ...props }) => {
+    // Check if children contain code elements that would cause hydration issues
+    const childrenArray = React.Children.toArray(children);
+    const hasBlockElements = childrenArray.some((child) => {
+      if (React.isValidElement(child)) {
+        // Check for CodeBlock component
+        if (child.type === CodeBlock) {
+          return true;
+        }
+        // Check for code elements with className indicating block code
+        if (child.type === 'code' && child.props?.className?.includes('language-')) {
+          return true;
+        }
+        // Check for pre elements
+        if (child.type === 'pre') {
+          return true;
+        }
+        // Check for div elements that might contain code blocks
+        if (child.type === 'div' && child.props?.className?.includes('not-prose')) {
+          return true;
+        }
+      }
+      return false;
+    });
+    
+    if (hasBlockElements) {
+      return <div {...props}>{children}</div>;
+    }
+    
+    return <p {...props}>{children}</p>;
+  },
   ol: ({ node, children, ...props }) => {
     return (
       <ol className="list-decimal list-outside ml-4" {...props}>
