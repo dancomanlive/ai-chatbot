@@ -3,6 +3,7 @@ import type { getWeather } from './ai/tools/get-weather';
 import type { createDocument } from './ai/tools/create-document';
 import type { updateDocument } from './ai/tools/update-document';
 import type { requestSuggestions } from './ai/tools/request-suggestions';
+import type { triggerWorkflow, checkWorkflowStatus } from './ai/tools/trigger-workflow';
 import type { InferUITool, UIMessage } from 'ai';
 
 import type { ArtifactKind } from '@/components/artifact';
@@ -22,12 +23,16 @@ type updateDocumentTool = InferUITool<ReturnType<typeof updateDocument>>;
 type requestSuggestionsTool = InferUITool<
   ReturnType<typeof requestSuggestions>
 >;
+type triggerWorkflowTool = InferUITool<ReturnType<typeof triggerWorkflow>>;
+type checkWorkflowStatusTool = InferUITool<ReturnType<typeof checkWorkflowStatus>>;
 
 export type ChatTools = {
   getWeather: weatherTool;
   createDocument: createDocumentTool;
   updateDocument: updateDocumentTool;
   requestSuggestions: requestSuggestionsTool;
+  triggerWorkflow: triggerWorkflowTool;
+  checkWorkflowStatus: checkWorkflowStatusTool;
 };
 
 export type CustomUIDataTypes = {
@@ -42,7 +47,44 @@ export type CustomUIDataTypes = {
   kind: ArtifactKind;
   clear: null;
   finish: null;
+  workflowProgress: WorkflowProgress;
+  workflowStep: WorkflowStep;
+  workflowComplete: WorkflowResult;
 };
+
+export interface WorkflowProgress {
+  workflowId: string;
+  workflowType: string;
+  status: 'running' | 'completed' | 'failed' | 'cancelled';
+  currentStep: string;
+  totalSteps: number;
+  completedSteps: number;
+  startTime: string;
+  estimatedDuration?: number;
+}
+
+export interface WorkflowStep {
+  workflowId: string;
+  stepName: string;
+  stepIndex: number;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  startTime?: string;
+  endTime?: string;
+  duration?: number;
+  result?: any;
+  error?: string;
+  details?: Record<string, any>;
+}
+
+export interface WorkflowResult {
+  workflowId: string;
+  workflowType: string;
+  status: 'completed' | 'failed';
+  result?: any;
+  error?: string;
+  totalDuration: number;
+  steps: WorkflowStep[];
+}
 
 export type ChatMessage = UIMessage<
   MessageMetadata,

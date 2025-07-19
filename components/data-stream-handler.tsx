@@ -70,6 +70,12 @@ export function DataStreamHandler() {
               status: 'idle',
             };
 
+          case 'data-workflowProgress':
+          case 'data-workflowStep':
+          case 'data-workflowComplete':
+            // Workflow progress updates are handled separately
+            return draftArtifact;
+
           default:
             return draftArtifact;
         }

@@ -31,12 +31,12 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
       - "I need to search our knowledge base"
     `,
     inputSchema: z.object({
-      userMessage: z.string().describe('The original user message'),
+      message: z.string().describe('The original user message'),
     }),
-    execute: async ({ userMessage }) => {
+    execute: async ({ message }) => {
       try {
         // Extract event information from natural language
-        const extractedEvent = await extractEventFromMessage(userMessage);
+        const extractedEvent = await extractEventFromMessage(message);
         
         if (!extractedEvent.isWorkflowEvent) {
           return {
@@ -49,7 +49,7 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
         // Create Temporal event payload using session data
         const temporalEvent = createTemporalEvent(
           extractedEvent, 
-          userMessage, 
+          message, 
           chatId, 
           session.user?.id
         );
@@ -70,12 +70,17 @@ export const triggerWorkflow = ({ session, chatId }: TemporalToolProps) =>
           message: `Workflow triggered successfully! I've ${extractedEvent.eventType === 'document-added' ? 'started document processing' : 
             extractedEvent.eventType?.includes('document') ? 'begun document processing' :
             extractedEvent.eventType?.includes('search') ? 'initiated semantic search' :
-            'initiated workflow processing'} for your request.`,
+            'initiated workflow processing'} for your request. You can track the progress below.`,
           workflowId: result.workflowId,
           runId: result.runId,
           eventType: extractedEvent.eventType,
           priority: extractedEvent.priority,
           workflowTriggered: true,
+          enableProgressTracking: true,
+          workflowType: extractedEvent.eventType?.includes('search') ? 'semantic_search' : 
+                       extractedEvent.eventType?.includes('document') ? 'document_processing' : 
+                       extractedEvent.eventType === 'incident' ? 'incident_response' : 
+                       'document_processing',
           details: {
             eventType: temporalEvent.eventType,
             source: temporalEvent.source,

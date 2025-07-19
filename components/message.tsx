@@ -16,6 +16,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { MessageEditor } from './message-editor';
 import { DocumentPreview } from './document-preview';
 import { MessageReasoning } from './message-reasoning';
+import { WorkflowMessage } from './workflow-message';
 import type { UseChatHelpers } from '@ai-sdk/react';
 import type { ChatMessage } from '@/lib/types';
 import { useDataStream } from './data-stream-provider';
@@ -303,6 +304,63 @@ const PurePreviewMessage = ({
                         result={output}
                         isReadonly={isReadonly}
                       />
+                    </div>
+                  );
+                }
+              }
+
+              if (type === 'tool-triggerWorkflow') {
+                const { toolCallId, state } = part;
+
+                if (state === 'input-available') {
+                  const { input } = part;
+                  return (
+                    <div key={toolCallId}>
+                      <div className="p-3 border rounded-lg bg-blue-50 dark:bg-blue-950">
+                        <div className="text-sm text-blue-700 dark:text-blue-300">
+                          Starting workflow: {input.message}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (state === 'output-available') {
+                  const { output } = part;
+
+                  if ('error' in output) {
+                    return (
+                      <div
+                        key={toolCallId}
+                        className="text-red-500 p-2 border rounded"
+                      >
+                        Error: {String(output.error)}
+                      </div>
+                    );
+                  }
+
+                  // Only render WorkflowMessage if workflowId exists
+                  if (output.workflowId && output.workflowType && output.message) {
+                    return (
+                      <div key={toolCallId}>
+                        <WorkflowMessage
+                          workflowId={output.workflowId}
+                          workflowType={output.workflowType}
+                          message={output.message}
+                          isReadonly={isReadonly}
+                        />
+                      </div>
+                    );
+                  }
+
+                  // Fallback for incomplete workflow data
+                  return (
+                    <div key={toolCallId}>
+                      <div className="p-3 border rounded-lg bg-gray-50 dark:bg-gray-900">
+                        <div className="text-sm text-gray-700 dark:text-gray-300">
+                          Workflow initiated successfully
+                        </div>
+                      </div>
                     </div>
                   );
                 }

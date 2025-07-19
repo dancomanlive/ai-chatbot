@@ -24,6 +24,7 @@ import { updateDocument } from '@/lib/ai/tools/update-document';
 import { requestSuggestions } from '@/lib/ai/tools/request-suggestions';
 import { getWeather } from '@/lib/ai/tools/get-weather';
 import { triggerWorkflow, checkWorkflowStatus } from '@/lib/ai/tools/trigger-workflow';
+import { trackWorkflowProgress, getWorkflowStepDetails } from '@/lib/ai/tools/workflow-progress';
 import { isProductionEnvironment } from '@/lib/constants';
 import { myProvider } from '@/lib/ai/providers';
 import { entitlementsByUserType } from '@/lib/ai/entitlements';
@@ -318,6 +319,8 @@ export async function POST(request: Request) {
                   'requestSuggestions',
                   'triggerWorkflow',
                   'checkWorkflowStatus',
+                  'trackWorkflowProgress',
+                  'getWorkflowStepDetails',
                 ],
           experimental_transform: smoothStream({ chunking: 'word' }),
           tools: {
@@ -330,6 +333,8 @@ export async function POST(request: Request) {
             }),
             triggerWorkflow: triggerWorkflow({ session: effectiveSession, chatId: id }),
             checkWorkflowStatus: checkWorkflowStatus({ session: effectiveSession, chatId: id }),
+            trackWorkflowProgress: trackWorkflowProgress({ session: effectiveSession, dataStream }),
+            getWorkflowStepDetails: getWorkflowStepDetails({ session: effectiveSession }),
           },
           experimental_telemetry: {
             isEnabled: isProductionEnvironment,
